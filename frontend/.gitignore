@@ -1,0 +1,8 @@
+node_modules/
+.vite/
+.npm-cache/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example

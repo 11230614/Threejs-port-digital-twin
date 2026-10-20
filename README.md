@@ -1,5 +1,6 @@
 # 港口数字孪生可视化平台
 
+<!-- 图片由项目作者补充 -->
 
 港口数字孪生可视化平台是一个面向港口作业场景的 Web 3D 演示系统。前端使用 Vue 3、TypeScript 和 Three.js 构建港区场景，将岸桥、AGV、集装箱、堆场、道路和船舶等对象组织为可交互的数字场景；后端提供设备、任务、集装箱和健康检查等 API，并可连接 PostgreSQL 保存业务记录。
 
@@ -44,16 +45,15 @@
 
 ## 技术栈
 
-| 层级         | 技术                         | 用途                              |
-| ------------ | ---------------------------- | --------------------------------- |
-| 前端框架     | Vue 3、TypeScript            | 页面、交互和类型约束              |
-| 构建工具     | Vite                         | 前端开发服务器与生产构建          |
-| 3D 图形      | Three.js                     | 港口场景、模型、相机和渲染        |
-| 状态管理     | Pinia                        | 设备、资产、任务、告警和性能状态  |
-| 后端框架     | Node.js、Express、TypeScript | HTTP API 与服务端逻辑             |
-| 数据访问     | Prisma、PostgreSQL           | 关系数据模型和持久化访问          |
-| 实时传输边界 | ws                           | 可选的后端 AGV 遥测模拟 WebSocket |
-| 浏览器测试   | Playwright                   | 页面、Runtime 与场景集成测试      |
+| 层级 | 技术 | 用途 |
+| --- | --- | --- |
+| 前端框架 | Vue 3、TypeScript | 页面、交互和类型约束 |
+| 构建工具 | Vite | 前端开发服务器与生产构建 |
+| 3D 图形 | Three.js | 港口场景、模型、相机和渲染 |
+| 状态管理 | Pinia | 设备、资产、任务、告警和性能状态 |
+| 后端框架 | Node.js、Express、TypeScript | HTTP API 与服务端逻辑 |
+| 数据访问 | Prisma、PostgreSQL | 关系数据模型和持久化访问 |
+| 实时传输边界 | ws | 可选的后端 AGV 遥测模拟 WebSocket |
 
 ## 项目结构
 
@@ -73,8 +73,6 @@ vue+three/
 │   │   ├── telemetry/        # 模拟遥测数据源与消息边界
 │   │   └── world/            # 道路、堆场、地面和路径
 │   ├── model/                # GLB 模型资源
-│   ├── tests/                # Node 冒烟测试及 Playwright 浏览器测试
-│   ├── docs/                 # 迁移、构建与浏览器测试文档
 │   ├── package.json
 │   └── vite.config.js
 │
@@ -93,14 +91,14 @@ vue+three/
 
 后端 Prisma schema 描述设备、遥测快照、任务、任务执行事件、集装箱和告警等数据结构。数据库脚本位于 `backend/sql/`。
 
-| 数据模型                | 用途                                                   |
-| ----------------------- | ------------------------------------------------------ |
-| `devices`               | 港口设备档案，当前演示清单包含 AGV-01 至 AGV-05        |
-| `device_telemetry`      | 设备最新遥测快照的数据结构；当前模拟流不会自动写入此表 |
-| `tasks`                 | 任务请求、任务类型、执行状态及关联设备/集装箱          |
-| `task_execution_events` | 任务执行事件和幂等序号                                 |
-| `containers`            | 集装箱业务编号、场景实体、堆场位置和状态               |
-| `alarms`                | 告警持久化的数据结构；初始化脚本不会生成模拟告警       |
+| 数据模型 | 用途 |
+| --- | --- |
+| `devices` | 港口设备档案，当前演示清单包含 AGV-01 至 AGV-05 |
+| `device_telemetry` | 设备最新遥测快照的数据结构；当前模拟流不会自动写入此表 |
+| `tasks` | 任务请求、任务类型、执行状态及关联设备/集装箱 |
+| `task_execution_events` | 任务执行事件和幂等序号 |
+| `containers` | 集装箱业务编号、场景实体、堆场位置和状态 |
+| `alarms` | 告警持久化的数据结构；初始化脚本不会生成模拟告警 |
 
 项目提供 PostgreSQL 初始化脚本 `backend/sql/port_twin_init.sql`，以及用于已有数据库补充集装箱表结构的增量脚本 `backend/sql/migrations/002_containers.sql`。脚本应由开发者按目标数据库状态选择执行；不要对已有重要数据库直接重复初始化或迁移。
 
@@ -113,7 +111,6 @@ vue+three/
 - Node.js（建议使用当前受支持的 LTS 版本）
 - npm
 - 可选：PostgreSQL（需要持久化时）
-- Chrome/Chromium（运行 Playwright 浏览器测试时）
 
 ### 1. 安装前端依赖
 
@@ -186,15 +183,13 @@ TELEMETRY_INTERVAL_MS=500
 
 前端还包含随机模拟数据源（`mock-websocket` / `mock-mqtt`），但当前 Runtime 默认未选择它。若想单独使用前端随机状态模拟，可在 `frontend/src/app/PortRuntime.ts` 中 `_startTelemetry()` 的 `mode` 配置为 `mock-websocket`，再重启前端；此模式不需要后端 WebSocket，也不需要 MQTT Broker。两类模拟源用途不同，不会自动互相切换。
 
-### 5. 常用检查
+### 5. 类型检查与生产构建
 
 在 `frontend/` 目录执行：
 
 ```bash
 npm run type-check
 npm run build
-npm run test:config-migration
-npm run test:browser:smoke
 ```
 
 在 `backend/` 目录执行：
@@ -203,25 +198,25 @@ npm run test:browser:smoke
 npm run type-check
 ```
 
-浏览器测试需要可用的 Chrome/Chromium；涉及数据库的运行路径还需要本地 PostgreSQL。不要将类型检查或 Node 冒烟测试等同于完整浏览器、GPU 或真实设备集成验证。
+涉及数据库的运行路径需要本地 PostgreSQL。类型检查和生产构建不等同于完整浏览器、GPU 或真实设备集成验证。
 
 ## API 概览
 
 后端默认前缀为 `/api`，开发时可经 Vite 代理访问。
 
-| 方法 | 路径                              | 说明                                     |
-| ---- | --------------------------------- | ---------------------------------------- |
-| GET  | `/api/health`                     | 后端健康检查                             |
-| GET  | `/api/db/health`                  | PostgreSQL 连接状态                      |
-| GET  | `/api/devices`                    | 查询设备列表，可按类型筛选               |
-| GET  | `/api/devices/:id`                | 查询单台设备                             |
-| GET  | `/api/tasks`                      | 分页查询任务，可按状态筛选               |
-| POST | `/api/tasks`                      | 创建任务请求                             |
-| GET  | `/api/tasks/:id`                  | 查询任务详情                             |
-| POST | `/api/tasks/:id/execution-events` | 上报任务执行事件                         |
-| GET  | `/api/containers`                 | 分页查询集装箱                           |
-| POST | `/api/containers/sync`            | 同步场景集装箱快照                       |
-| GET  | `/api/telemetry/snapshot`         | 查询后端模拟遥测快照（需服务已生成数据） |
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/health` | 后端健康检查 |
+| GET | `/api/db/health` | PostgreSQL 连接状态 |
+| GET | `/api/devices` | 查询设备列表，可按类型筛选 |
+| GET | `/api/devices/:id` | 查询单台设备 |
+| GET | `/api/tasks` | 分页查询任务，可按状态筛选 |
+| POST | `/api/tasks` | 创建任务请求 |
+| GET | `/api/tasks/:id` | 查询任务详情 |
+| POST | `/api/tasks/:id/execution-events` | 上报任务执行事件 |
+| GET | `/api/containers` | 分页查询集装箱 |
+| POST | `/api/containers/sync` | 同步场景集装箱快照 |
+| GET | `/api/telemetry/snapshot` | 查询后端模拟遥测快照（需服务已生成数据） |
 
 遥测 WebSocket（可选模拟器）：
 
@@ -267,10 +262,8 @@ Vue 页面创建 PortRuntime
 
 - 前后端分别在 `frontend/`、`backend/` 安装依赖和运行命令。
 - Vite 开发代理目标为 `http://127.0.0.1:3002`；如修改后端端口，也需同步调整 `frontend/vite.config.js`。
-- Playwright 配置默认使用 `5173` 端口；避免同时启动多个使用相同端口的浏览器测试服务。
 - `frontend/dist/` 是生产构建输出，运行 `npm run build` 可重新生成。
-- 浏览器测试报告和测试结果分别保存在 `frontend/playwright-report/` 与 `frontend/test-results/`。
-- 性能、真实 GPU 压力、跨浏览器视觉一致性及真实港口设备接入不属于本 README 所声明的已验证范围。
+- 本发布快照不包含测试目录；性能、真实 GPU 压力、跨浏览器视觉一致性及真实港口设备接入不属于本 README 所声明的已验证范围。
 
 ## 许可证
 

@@ -1,16 +1,26 @@
 # Local dependencies and tool caches
 node_modules/
+**/node_modules/
 .vite/
+**/.vite/
 .npm-cache/
+**/.npm-cache/
 
 # Local environment and secrets
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
 
 # Local development logs and temporary scanners
 vite-dev-*.log
 scan-*.cjs
+
+# Local build and browser-test outputs
+frontend/playwright-report/
+frontend/test-results/
 
 # Local assistant/editor settings
 .claude/
