@@ -1,0 +1,230 @@
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #03070a;
+  font-family:
+    "Microsoft YaHei",
+    "PingFang SC",
+    "Segoe UI",
+    sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell,
+.scene-host {
+  position: fixed;
+  inset: 0;
+}
+
+.scene-host canvas {
+  display: block;
+}
+
+.backend-status {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(63, 216, 255, 0.34);
+  border-radius: 5px;
+  color: #d8fbff;
+  background: rgba(0, 18, 32, 0.84);
+  font-size: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.backend-status__indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f2bd55;
+}
+
+.backend-status__indicator.is-connected {
+  background: #51f2a6;
+  box-shadow: 0 0 8px rgba(81, 242, 166, 0.75);
+}
+
+.backend-status__indicator.is-error {
+  background: #ff7676;
+}
+
+.backend-status__retry {
+  padding: 3px 8px;
+  border: 1px solid rgba(63, 216, 255, 0.45);
+  border-radius: 4px;
+  color: inherit;
+  background: rgba(40, 180, 220, 0.2);
+  cursor: pointer;
+}
+
+.backend-status__retry:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.panel-container {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 11;
+  display: grid;
+  gap: 10px;
+  width: min(330px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  box-sizing: border-box;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid rgba(63, 216, 255, 0.34);
+  border-radius: 6px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 26, 48, 0.86),
+    rgba(0, 12, 28, 0.92)
+  );
+  box-shadow: 0 0 26px rgba(40, 200, 255, 0.22);
+  backdrop-filter: blur(12px);
+}
+
+.dock-ui {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  width: min(290px, calc(100vw - 28px));
+  box-sizing: border-box;
+  padding: 14px;
+  border: 1px solid rgba(63, 216, 255, 0.7);
+  border-radius: 6px;
+  color: #b8f5ff;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 42, 78, 0.88),
+    rgba(0, 16, 40, 0.9)
+  );
+  box-shadow: 0 0 24px rgba(40, 200, 255, 0.32);
+  backdrop-filter: blur(10px);
+}
+
+.dock-ui__title {
+  margin-bottom: 10px;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(49, 247, 255, 0.85);
+}
+
+.dock-ui__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.dock-ui__stats div {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(63, 216, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(5, 18, 31, 0.55);
+}
+
+.dock-ui__stats dt {
+  margin: 0 0 3px;
+  color: rgba(184, 245, 255, 0.72);
+  font-size: 12px;
+}
+
+.dock-ui__stats dd {
+  margin: 0;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dock-ui__button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(63, 216, 255, 0.8);
+  border-radius: 4px;
+  color: #d8fbff;
+  background: rgba(40, 180, 220, 0.28);
+  cursor: pointer;
+}
+
+.dock-ui__button.is-active {
+  border-color: rgba(255, 170, 140, 0.9);
+  background: rgba(220, 80, 80, 0.35);
+}
+
+.dock-ui__selection {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(63, 216, 255, 0.25);
+  font-size: 12px;
+}
+
+.dock-ui__selection strong {
+  color: #ffffff;
+}
+
+.dock-ui__tip {
+  position: fixed;
+  right: 12px;
+  bottom: 10px;
+  color: rgba(184, 245, 255, 0.72);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.yard-label {
+  display: grid;
+  gap: 2px;
+  min-width: 64px;
+  padding: 6px 10px;
+  border: 1px solid rgba(63, 216, 255, 0.8);
+  border-radius: 4px;
+  color: #b8f5ff;
+  text-align: center;
+  white-space: nowrap;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 40, 80, 0.86),
+    rgba(0, 20, 50, 0.86)
+  );
+  box-shadow: 0 0 12px rgba(40, 200, 255, 0.45);
+  text-shadow: 0 0 4px rgba(49, 247, 255, 0.7);
+}
+
+.yard-label span {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+@media (max-width: 760px) {
+  .dock-ui {
+    top: 10px;
+    left: 10px;
+    width: min(270px, calc(100vw - 20px));
+  }
+
+  .panel-container {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 42vh;
+  }
+}

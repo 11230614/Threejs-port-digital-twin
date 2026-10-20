@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model alarms {
+  id          String   @id @db.VarChar(160)
+  type        String   @db.VarChar(64)
+  severity    String   @db.VarChar(16)
+  status      String   @default("active") @db.VarChar(16)
+  entity_type String   @db.VarChar(32)
+  entity_id   String   @db.VarChar(64)
+  device_id   String?  @db.VarChar(64)
+  message     String
+  suggestion  String?
+  details     Json     @default("{}")
+  occurred_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+  devices     devices? @relation(fields: [device_id], references: [id], onUpdate: NoAction)
+
+  @@index([entity_type, entity_id, occurred_at(sort: Desc)], map: "idx_alarms_entity")
+  @@index([status, occurred_at(sort: Desc), id(sort: Desc)], map: "idx_alarms_status_occurred_at")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model containers {
+  database_id BigInt   @id @default(autoincrement())
+  business_id String   @unique @db.VarChar(64)
+  entity_id   String?  @unique @db.VarChar(128)
+  asset_id    String   @db.VarChar(64)
+  block_id    String   @db.VarChar(64)
+  area        String   @db.VarChar(128)
+  slot        Json     @default("{}")
+  state       String   @default("YARD") @db.VarChar(32)
+  location    String?  @db.VarChar(128)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+  tasks       tasks[]
+
+  @@index([block_id, state, business_id], map: "idx_containers_block_state")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model device_telemetry {
+  device_id     String   @id @db.VarChar(64)
+  online_status String?  @db.VarChar(16)
+  position      Json?
+  speed         Float?
+  battery       Float?
+  payload       Json     @default("{}")
+  observed_at   DateTime @db.Timestamptz(6)
+  received_at   DateTime @default(now()) @db.Timestamptz(6)
+  devices       devices  @relation(fields: [device_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([observed_at(sort: Desc)], map: "idx_device_telemetry_observed_at")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model devices {
+  id                                                                 String                  @id @db.VarChar(64)
+  entity_id                                                          String                  @unique @db.VarChar(64)
+  name                                                               String                  @db.VarChar(128)
+  type                                                               String                  @db.VarChar(32)
+  created_at                                                         DateTime                @default(now()) @db.Timestamptz(6)
+  alarms                                                             alarms[]
+  device_telemetry                                                   device_telemetry?
+  task_execution_events_task_execution_events_agv_entity_idTodevices task_execution_events[] @relation("task_execution_events_agv_entity_idTodevices")
+  task_execution_events_task_execution_events_agv_idTodevices        task_execution_events[] @relation("task_execution_events_agv_idTodevices")
+  tasks_tasks_agv_entity_idTodevices                                 tasks[]                 @relation("tasks_agv_entity_idTodevices")
+  tasks_tasks_agv_idTodevices                                        tasks[]                 @relation("tasks_agv_idTodevices")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model task_execution_events {
+  id                                                   BigInt   @id @default(autoincrement())
+  task_id                                              String   @db.VarChar(96)
+  event_id                                             String   @db.VarChar(128)
+  sequence                                             Int
+  status                                               String   @db.VarChar(16)
+  stage                                                String?  @db.VarChar(64)
+  agv_id                                               String?  @db.VarChar(64)
+  agv_entity_id                                        String?  @db.VarChar(64)
+  failure                                              Json?
+  payload                                              Json     @default("{}")
+  created_at                                           DateTime @default(now()) @db.Timestamptz(6)
+  devices_task_execution_events_agv_entity_idTodevices devices? @relation("task_execution_events_agv_entity_idTodevices", fields: [agv_entity_id], references: [entity_id], onDelete: NoAction, onUpdate: NoAction, map: "task_events_agv_entity_fk")
+  devices_task_execution_events_agv_idTodevices        devices? @relation("task_execution_events_agv_idTodevices", fields: [agv_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "task_events_agv_fk")
+  tasks                                                tasks    @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([task_id, event_id], map: "task_events_event_unique")
+  @@unique([task_id, sequence], map: "task_events_sequence_unique")
+  @@index([task_id, sequence], map: "idx_task_events_task_sequence")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tasks {
+  id                                   String                  @id @db.VarChar(96)
+  client_request_id                    String                  @unique @db.VarChar(100)
+  type                                 String                  @db.VarChar(32)
+  parameters                           Json                    @default("{}")
+  status                               String                  @default("pending") @db.VarChar(16)
+  stage                                String                  @default("created") @db.VarChar(64)
+  agv_id                               String?                 @db.VarChar(64)
+  agv_entity_id                        String?                 @db.VarChar(64)
+  created_at                           DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at                           DateTime                @default(now()) @db.Timestamptz(6)
+  failure                              Json?
+  container_id                         String?                 @db.VarChar(64)
+  task_execution_events                task_execution_events[]
+  devices_tasks_agv_entity_idTodevices devices?                @relation("tasks_agv_entity_idTodevices", fields: [agv_entity_id], references: [entity_id], onDelete: NoAction, onUpdate: NoAction, map: "tasks_agv_entity_fk")
+  devices_tasks_agv_idTodevices        devices?                @relation("tasks_agv_idTodevices", fields: [agv_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "tasks_agv_fk")
+  containers                           containers?             @relation(fields: [container_id], references: [business_id], onDelete: NoAction, onUpdate: NoAction, map: "tasks_container_fk")
+
+  @@index([status, created_at(sort: Desc), id(sort: Desc)], map: "idx_tasks_status_created")
+  @@index([type, created_at(sort: Desc), id(sort: Desc)], map: "idx_tasks_type_created")
+}

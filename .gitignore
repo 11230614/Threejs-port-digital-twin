@@ -1,0 +1,16 @@
+# Local dependencies and tool caches
+node_modules/
+.vite/
+.npm-cache/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local development logs and temporary scanners
+vite-dev-*.log
+scan-*.cjs
+
+# Local assistant/editor settings
+.claude/

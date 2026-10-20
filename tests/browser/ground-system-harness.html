@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GroundSystem browser harness</title>
+  </head>
+  <body>
+    <script type="module">
+      import * as THREE from "three";
+      import { GroundSystem } from "/src/world/GroundSystem.ts";
+
+      window.groundSystemHarness = {
+        THREE,
+        GroundSystem,
+      };
+    </script>
+  </body>
+</html>
