@@ -38,6 +38,7 @@ import type { EntityManager } from "../EntityManager";
 import { ComponentTypes } from "../components/ComponentTypes";
 import type { MotionComponent, MotionPhase, MotionRoute } from "../components/MotionComponent";
 import type { TransformComponent } from "../components/TransformComponent";
+import { TelemetryRouteAdapter } from "../../telemetry/TelemetryRouteAdapter";
 
 export interface MotionRoad {
   id: string;
@@ -71,10 +72,12 @@ export class MotionSystem {
   private readonly _tangent = new THREE.Vector3();
   private readonly _lookAt = new THREE.Vector3();
   private readonly _heldAGVs = new Set<string>();
+  private readonly telemetryRouteAdapter: TelemetryRouteAdapter | null;
 
   constructor(entityManager: EntityManager, config: MotionSystemConfig = {}) {
     this.manager = entityManager;
     this.roadSystem = config.roadSystem ?? null;
+    this.telemetryRouteAdapter = this.roadSystem ? new TelemetryRouteAdapter(this.roadSystem) : null;
     this.safeDistance = config.safeDistance ?? 30;
   }
 
@@ -145,13 +148,15 @@ export class MotionSystem {
     const target = motion?.telemetryTarget;
     if (!motion || !transform || !target) return;
     const lane = this.roadSystem?.getLane(motion.laneId);
-    if (!lane || !this.roadSystem || lane.length <= 0) return;
-    const raw = new THREE.Vector3(target.x, target.y, target.z);
-      const targetProgress = this.roadSystem.getNearestU(lane.id, raw, 512);
-      const road = this.roadSystem.getRoad(lane.roadId);
-      const closed = road?.closed ?? false;
+    const adapter = this.telemetryRouteAdapter;
+    const roads = this.roadSystem;
+    if (!lane || !roads || !adapter || lane.length <= 0) return;
+      const targetProgress = adapter.resolveLaneProgress(lane.id, target);
+      if (targetProgress === null || targetProgress === undefined) return;
+      const closed = adapter.isClosedLane(lane.id);
       if (motion.telemetryProgress === null) {
-        motion.telemetryProgress = this.roadSystem.getNearestU(lane.id, transform.wrapper.position, 512);
+        motion.telemetryProgress = adapter.resolveLaneProgress(lane.id, transform.wrapper.position);
+        if (motion.telemetryProgress === null) return;
       }
 
       let difference = targetProgress - motion.telemetryProgress;
@@ -168,8 +173,8 @@ export class MotionSystem {
       if (closed) motion.telemetryProgress = THREE.MathUtils.euclideanModulo(motion.telemetryProgress, 1);
       else motion.telemetryProgress = THREE.MathUtils.clamp(motion.telemetryProgress, 0, 1);
 
-      if (!this.roadSystem.getPointAt(lane.id, motion.telemetryProgress, this._position)) return;
-      if (this.roadSystem.getTangentAt(lane.id, motion.telemetryProgress, this._tangent)) {
+      if (!roads.getPointAt(lane.id, motion.telemetryProgress, this._position)) return;
+      if (roads.getTangentAt(lane.id, motion.telemetryProgress, this._tangent)) {
         transform.wrapper.position.copy(this._position);
         this._lookAt.copy(this._position).add(this._tangent);
         transform.wrapper.lookAt(this._lookAt);

@@ -12,7 +12,7 @@ class WebSocketTelemetrySource {
   subscribe(listener: (value: any) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   start() { this.stopped = false; this.connect(); }
   stop() { this.stopped = true; if (this.timer) clearTimeout(this.timer); this.socket?.close(); this.socket = null; }
-  private connect() { 
+  private connect() {
     console.log(
   "Telemetry WebSocket URL:",
   import.meta.env.VITE_TELEMETRY_WS_URL,
