@@ -121,6 +121,7 @@ import { HighlightSystem } from "../rendering/HighlightSystem.ts";
 import { LabelSystem } from "../rendering/LabelSystem.ts";
 // 性能监测
 import { PerformanceSystem } from "../rendering/PerformanceSystem.ts";
+import { PerformanceDiagnostics } from "../rendering/PerformanceDiagnostics.ts";
 import { QualityController } from "../rendering/QualityController.ts";
 import { AdaptiveQualitySystem } from "../rendering/AdaptiveQualitySystem.ts";
 // 渲染循环与相机控制
@@ -183,6 +184,7 @@ export class PortRuntime {
   assetManager: LegacyRuntimeValue = null;
   modelAssetManager: LegacyRuntimeValue = null;
   frameObserver: LegacyRuntimeValue = null;
+  performanceDiagnostics: PerformanceDiagnostics | null = null;
   groundSystem: LegacyRuntimeValue = null;
   groundResult: LegacyRuntimeValue = null;
   sceneOperation: LegacyRuntimeValue = null;
@@ -226,6 +228,9 @@ export class PortRuntime {
   unregisterModelAssetMetrics: Unregister = () => false;
   unregisterQualityMetrics: Unregister = () => false;
   private devCameraMoveHandler: ((event: Event) => void) | null = null;
+  private devSpatialExperimentHandler: ((event: Event) => void) | null = null;
+  private devSpatialExperiment: { disableFrustumCulling: boolean; forcedLod: number | null; tightChunkBoundsY: boolean } = { disableFrustumCulling: false, forcedLod: null, tightChunkBoundsY: false };
+  private devTightChunkBounds = new Map<string, THREE.Box3>();
   private devDisposeHandler: (() => void) | null = null;
   private devAlarmHandler: ((event: Event) => void) | null = null;
   private devAlarmSnapshotHandler: (() => void) | null = null;
@@ -276,6 +281,9 @@ export class PortRuntime {
       // ---- 第一层：基础设施 ----
       // 主场景：相机、渲染器、灯光、天空
       this.mainScene = new MainScene(this.container);
+      const diagnosticEnabled = import.meta.env.DEV && new URLSearchParams(window.location.search).get("perfDiagnostics") === "1";
+      this.performanceDiagnostics = diagnosticEnabled ? new PerformanceDiagnostics({ enabled: true }) : null;
+      if (diagnosticEnabled) window.__PORT_PERF_DIAGNOSTICS__ = { summary: () => this.performanceDiagnostics?.summary() ?? {}, rawFrames: () => this.performanceDiagnostics?.rawFrames() ?? [], clear: () => this.performanceDiagnostics?.clear(), camera: () => ({ position: this.mainScene?.camera?.position?.toArray?.() ?? null, quaternion: this.mainScene?.camera?.quaternion?.toArray?.() ?? null, fov: this.mainScene?.camera?.fov ?? null, aspect: this.mainScene?.camera?.aspect ?? null, near: this.mainScene?.camera?.near ?? null, far: this.mainScene?.camera?.far ?? null, controlsTarget: this.renderSystem?.controls?.target?.toArray?.() ?? null }) };
       this._installDevCameraProbe();
       this._installDevDisposeProbe();
       this._installDevContainerSnapshotProbe();
@@ -291,13 +299,16 @@ export class PortRuntime {
       });
       // 帧观察器：后面所有每帧任务都注册到它
       this.frameObserver = new FrameObserver();
+      this.frameObserver.onTaskMeasure = diagnosticEnabled ? (name: string, durationMs: number) => this.performanceDiagnostics?.record(`system.${name}`, durationMs) : null;
 
       // 登记模型清单（告诉资源池有哪些模型、各自的路径与目标尺寸）
       this.modelAssetManager.registerManifest(PORT_MODEL_ASSETS);
       // 并行预加载全部模型。Promise.all（等全部完成）而不是逐个 await ——
       // 串行加载十几个模型要等好几秒，并行只等最慢的那一个。
       // 这里必须 await：下面所有创建三维内容的代码都假设模型已就位
+      const modelPreloadStarted = performance.now();
       await Promise.all(PORT_MODEL_ASSETS.map(({ id }) => this.modelAssetManager.preload(id)));
+      this.performanceDiagnostics?.record("init.model-preload", performance.now() - modelPreloadStarted);
       this._emitDiagnostic("assets-loaded", { assets: this.modelAssetManager.getMetrics() });
 
       // ---- 第二层：世界地形 ----
@@ -311,7 +322,9 @@ export class PortRuntime {
       // create（创建）返回一大包副产物：dock（码头）、water（水面）、
       // roadSystem（道路系统）、yardSystem（堆场系统）、yards（堆场列表）等。
       // 后面十几处都要用 this.groundResult 里的东西，所以整包存下来
+      const groundCreateStarted = performance.now();
       this.groundResult = this.groundSystem.create();
+      this.performanceDiagnostics?.record("init.ground-create", performance.now() - groundCreateStarted);
       // 将场景生成的容器纯业务快照交给后端持久化；不传递 Three.js/ECS 对象。
       void synchronizeContainerSnapshot(
         this.groundResult.yardSystem.getBlocks().flatMap((block: LegacyRuntimeValue) => block.containers.map((record: LegacyRuntimeValue) => ({
@@ -373,6 +386,7 @@ export class PortRuntime {
         cruiseCurve: this.mainScene.cruiseCurve,
         lookTarget: this.mainScene.lookTarget,
         frameObserver: this.frameObserver,
+        diagnostics: this.performanceDiagnostics,
       });
       // 标签系统：三维空间中的文字标注
       this.labelSystem = new LabelSystem({
@@ -496,13 +510,28 @@ export class PortRuntime {
       camera.updateMatrixWorld(true);
     };
     window.addEventListener("runtime-test-camera", this.devCameraMoveHandler);
+    this.devSpatialExperimentHandler = (event: Event) => {
+      const detail = (event as CustomEvent<{ disableFrustumCulling?: boolean; forcedLod?: number | null; tightChunkBoundsY?: boolean }>).detail ?? {};
+      this.devSpatialExperiment = {
+        disableFrustumCulling: detail.disableFrustumCulling === true,
+        forcedLod: Number.isInteger(detail.forcedLod) && (detail.forcedLod as number) >= 0 && (detail.forcedLod as number) <= 2 ? detail.forcedLod as number : null,
+        tightChunkBoundsY: detail.tightChunkBoundsY === true,
+      };
+    };
+    window.addEventListener("runtime-test-spatial-experiment", this.devSpatialExperimentHandler);
   }
 
   private _removeDevCameraProbe(): void {
     if (typeof window !== "undefined" && this.devCameraMoveHandler) {
       window.removeEventListener("runtime-test-camera", this.devCameraMoveHandler);
     }
+    if (typeof window !== "undefined" && this.devSpatialExperimentHandler) {
+      window.removeEventListener("runtime-test-spatial-experiment", this.devSpatialExperimentHandler);
+    }
     this.devCameraMoveHandler = null;
+    this.devSpatialExperimentHandler = null;
+    this.devSpatialExperiment = { disableFrustumCulling: false, forcedLod: null, tightChunkBoundsY: false };
+    this.devTightChunkBounds.clear();
   }
 
   // _installDevDisposeProbe（开发环境销毁观测缝）：调用真实 destroy 路径，
@@ -678,6 +707,7 @@ export class PortRuntime {
     // 停掉渲染循环。这一步之后不再有任何 requestAnimationFrame 回调，
     // 下面拆结构才安全——若循环还在跑，会访问到已被释放的对象
     this.renderSystem?.stop();
+    this.highlightSystem?.dispose();
 
     // 逐个退订性能指标提供者。每个都是注册时返回的闭包，
     // 不调用的话性能系统会一直持有各系统的引用，整张对象图都无法被回收
@@ -690,6 +720,9 @@ export class PortRuntime {
     this.unregisterPerformanceListener?.();
     // 释放性能系统自己的资源
     this.performanceSystem?.dispose();
+    this.performanceDiagnostics?.dispose();
+    this.performanceDiagnostics = null;
+    if (typeof window !== "undefined") delete window.__PORT_PERF_DIAGNOSTICS__;
 
     // 释放五个渲染适配器持有的显存资源
     this.roadRenderAdapter?.dispose();
@@ -971,9 +1004,10 @@ export class PortRuntime {
       motionSystem: this.motionSystem,
       // 路径管理器在这里就地 new。它是任务系统的私有工具，
       // 别处不用，没必要挂到 this 上
-      pathManager: new PathManager({
+        pathManager: new PathManager({
         roadSystem: this.groundResult.roadSystem,
         yardRoadNetwork: this.groundResult.roadNetwork,
+          onMeasure: (name, durationMs) => this.performanceDiagnostics?.record(name, durationMs),
       }),
       equipmentManager,
       quayCraneSystem: this.quayCraneSystem,
@@ -1078,6 +1112,7 @@ export class PortRuntime {
         this.chunkSystem.register({
           id: `container:${record.id}`,
           bounds: pointBounds,
+          cullingBounds: record.bounds ?? pointBounds,
           renderType: "container",
           data: record,
         });
@@ -1136,7 +1171,16 @@ export class PortRuntime {
           // isVisible（是否可见）以回调形式传入，是为了让区块系统
           // 不必依赖 Three.js —— 它只负责"什么时候问"，
           // 怎么判断由调用方决定。这样区块系统可以单独做单元测试
-          isVisible: (chunk: LegacyRuntimeValue) => this.spatialFrustum.intersectsBox(chunk.bounds),
+          isVisible: (chunk: LegacyRuntimeValue) => {
+            if (this.devSpatialExperiment.disableFrustumCulling) return true;
+            if (import.meta.env.DEV && this.devSpatialExperiment.tightChunkBoundsY) {
+              const boundsForUpdate = this.devTightChunkBounds.get(chunk.key) ?? chunk.cullingBounds.clone();
+              this.devTightChunkBounds.set(chunk.key, boundsForUpdate);
+              boundsForUpdate.copy(chunk.cullingBounds);
+              return this.spatialFrustum.intersectsBox(boundsForUpdate);
+            }
+            return this.spatialFrustum.intersectsBox(chunk.cullingBounds);
+          },
         });
       },
     }, {
@@ -1156,6 +1200,7 @@ export class PortRuntime {
           // 只看激活区块，这是分层优化的精髓——
           // 已经被区块系统排除的东西，LOD 连看一眼都不用
           activeChunks: this.chunkSystem.getActiveChunks(),
+          forcedLevel: import.meta.env.DEV ? this.devSpatialExperiment.forcedLod : null,
           // elapsedTime 是秒，乘 1000 换成毫秒。
           // LOD 内部的时间防抖用毫秒，单位必须对齐
           timestamp: elapsedTime * 1000,
@@ -1174,6 +1219,17 @@ export class PortRuntime {
         const camera = this.mainScene.camera;
         this._emitDiagnostic("spatial-render-snapshot", {
           camera: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+          // DEV-only spatial diagnostics expose the exact world-space bounds used by
+          // intersectsBox, plus member bounds for diagnosing conservative buckets.
+          cameraProjection: { fov: camera.fov, aspect: camera.aspect, near: camera.near, far: camera.far, direction: camera.getWorldDirection(new THREE.Vector3()).toArray() },
+          activeChunkBounds: this.chunkSystem.getActiveChunks().map((chunk: LegacyRuntimeValue) => ({
+            id: chunk.key,
+            bounds: { min: chunk.bounds.min.toArray(), max: chunk.bounds.max.toArray() },
+            cullingBounds: { min: chunk.cullingBounds.min.toArray(), max: chunk.cullingBounds.max.toArray() },
+            memberIds: [...chunk.members.keys()],
+            memberBounds: [...chunk.members.values()].map((member: LegacyRuntimeValue) => ({ id: member.id, renderType: member.renderType, min: member.bounds.min.toArray(), max: member.bounds.max.toArray(), cullingMin: member.cullingBounds.min.toArray(), cullingMax: member.cullingBounds.max.toArray() })),
+            visible: chunk.visible,
+          })),
           chunks: this.chunkSystem.getMetrics(),
           lod: this.lodSystem.getMetrics(),
           spatialRender: this.spatialRenderSystem.getMetrics(),
@@ -1272,10 +1328,17 @@ export class PortRuntime {
       id,
       // 初始包围盒
       bounds: getBounds(),
+      // The render object may extend far beyond its owner point; keep full
+      // world-space render bounds separate from XZ ownership/distance bounds.
+      cullingBounds: objectBounds,
       // getBounds 只给动态物体传。静态物体传 null，
       // 区块系统看到 null 就知道"这个不用每次重算"，直接省掉一次函数调用。
       // 上万个静态物体累积起来，这个省法很可观
       getBounds: dynamic ? getBounds : null,
+      getCullingBounds: dynamic ? () => {
+        object.updateMatrixWorld(true);
+        return new THREE.Box3().setFromObject(object);
+      } : null,
       dynamic,
       renderType,
       data,
@@ -1320,12 +1383,17 @@ export class PortRuntime {
         // 区块系统只需知道它大致在哪一格；
         // 没有渲染类型的物体靠包围盒做精确的视锥剔除，需要真实尺寸
         bounds: renderType ? getOwnerBounds() : transform.bbox,
+        cullingBounds: transform.bbox,
         dynamic,
         // 动态物体的实时包围盒获取函数。这里嵌套了一层判断：
         // 有渲染类型的仍用点；没有的要先 updateBBox（重算包围盒）
         // 再返回——因为物体动了，缓存的盒子已经过期
         getBounds: dynamic ? () => {
           if (renderType) return getOwnerBounds();
+          transform.updateBBox();
+          return transform.bbox;
+        } : null,
+        getCullingBounds: dynamic ? () => {
           transform.updateBBox();
           return transform.bbox;
         } : null,
