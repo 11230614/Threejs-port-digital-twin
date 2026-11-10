@@ -24,3 +24,26 @@ frontend/test-results/
 
 # Local assistant/editor settings
 .claude/
+
+# Version uploads: source and runtime assets only
+**/nodemodulesr/
+**/dist/
+**/tests/
+**/playwright-report/
+**/test-results/
+**/coverage/
+**/.claude/
+**/__pycache__/
+*.log
+*.tsbuildinfo
+/server/
+/frontend/dev/
+/frontend/public/ktx2-tests/
+/frontend/src/ktx2-test.html
+/frontend/src/ktx2-test.ts
+/frontend/alarm-shader-prototype.html
+/frontend/src/alarm-shader-prototype.ts
+/frontend/playwright.config.*
+/=true
+/backend/=true
+/backend/false=false

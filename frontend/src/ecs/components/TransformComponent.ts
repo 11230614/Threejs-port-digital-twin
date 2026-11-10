@@ -23,6 +23,8 @@ import * as THREE from "three";
 export class TransformComponent {
   readonly wrapper: THREE.Object3D;
   readonly bbox: THREE.Box3;
+  /** Model bottom centre in wrapper-local coordinates; set once by the factory. */
+  readonly groundAnchor = new THREE.Vector3();
   constructor(wrapper: THREE.Object3D = new THREE.Group()) { this.wrapper = wrapper; this.bbox = new THREE.Box3(); this.updateBBox(); }
   updateBBox(): void { this.bbox.setFromObject(this.wrapper); }
   getWorldPosition(): THREE.Vector3 { return this.wrapper.getWorldPosition(new THREE.Vector3()); }

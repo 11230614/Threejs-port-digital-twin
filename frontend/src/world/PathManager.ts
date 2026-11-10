@@ -104,11 +104,13 @@ export class PathManager {
   readonly yardRoadNetwork: YardRoadNetwork | null;
   readonly snapTolerance: number;
   lastError: string | null = null;
+  onMeasure: ((name: string, durationMs: number) => void) | null;
 
-  constructor({ roadSystem, yardRoadNetwork = null, snapTolerance = 0.75 }: { roadSystem: RoadSystemPathApi; yardRoadNetwork?: YardRoadNetwork | null; snapTolerance?: number }) {
+  constructor({ roadSystem, yardRoadNetwork = null, snapTolerance = 0.75, onMeasure = null }: { roadSystem: RoadSystemPathApi; yardRoadNetwork?: YardRoadNetwork | null; snapTolerance?: number; onMeasure?: ((name: string, durationMs: number) => void) | null }) {
     this.roadSystem = roadSystem;
     this.yardRoadNetwork = yardRoadNetwork;
     this.snapTolerance = snapTolerance;
+    this.onMeasure = onMeasure;
   }
 
   private _flat(point: THREE.Vector3): THREE.Vector3 { return new THREE.Vector3(point.x, 0.12, point.z); }
@@ -192,6 +194,8 @@ export class PathManager {
   }
 
   createYardRoute(from: THREE.Vector3, to: THREE.Vector3, options: YardRouteOptions = {}): MotionRoute | null {
+    const measureRoute = this.onMeasure !== null;
+    const routeStartedAt = measureRoute ? performance.now() : 0;
     this.lastError = null;
     const network = this.yardRoadNetwork ?? this.roadSystem.yardNetwork;
     if (!network?.nodes?.length) return this._fail("堆场路网尚未创建");
@@ -239,7 +243,6 @@ export class PathManager {
         }
       }
     }
-
     const projectSegment = (point: THREE.Vector3, segment: RouteSegment) => {
       const a = nodes.get(segment.a); const b = nodes.get(segment.b); if (!a || !b) return null;
       const delta = b.clone().sub(a); const t = THREE.MathUtils.clamp(point.clone().sub(a).dot(delta) / Math.max(delta.lengthSq(), 1e-12), 0, 1); const projected = a.clone().addScaledVector(delta, t);
@@ -269,6 +272,8 @@ export class PathManager {
       const stops = laneStops.get(lane.id) ?? []; stops.sort((a, b) => a.u - b.u); const closed = this.roadSystem.getRoad(lane.roadId)?.closed === true; const count = closed ? stops.length : stops.length - 1;
       for (let i = 0; i < count; i += 1) { const a = stops[i]; const b = stops[(i + 1) % stops.length]; if (!a || !b) continue; const delta = b.u - a.u + (i === stops.length - 1 ? 1 : 0); const lanePoints = this._lanePoints(lane, a.u, delta); if (!lanePoints) continue; addEdge(a.id, b.id, delta * lane.length, () => lanePoints.map((point) => point.clone())); }
     }
+    const preprocessMs = measureRoute ? performance.now() - routeStartedAt : 0;
+    const searchStartedAt = measureRoute ? performance.now() : 0;
     const distance = new Map<string, number>([[start.id, 0]]); const previous = new Map<string, { from: string; edge: GraphEdge }>(); const pending = new Set(nodes.keys());
     while (pending.size) {
       let current: string | null = null; let min = Infinity;
@@ -277,6 +282,9 @@ export class PathManager {
       for (const edge of adjacency.get(current) ?? []) { const next = min + edge.length; if (pending.has(edge.to) && next < (distance.get(edge.to) ?? Infinity)) { distance.set(edge.to, next); previous.set(edge.to, { from: current, edge }); } }
     }
     if (!distance.has(end.id)) return this._fail("外环与堆场之间没有合法连通路径");
+    if (measureRoute) this.onMeasure?.("path.search", performance.now() - searchStartedAt);
+    this.onMeasure?.("path.preprocessing", preprocessMs);
+    if (measureRoute) this.onMeasure?.("path.total", performance.now() - routeStartedAt);
     const steps: GraphEdge[] = []; for (let id = end.id; id !== start.id;) { const step = previous.get(id); if (!step) return this._fail("路线回溯失败"); steps.push(step.edge); id = step.from; }
     const startNode = nodes.get(start.id);
     if (!startNode) return this._fail("路线起点节点不存在");

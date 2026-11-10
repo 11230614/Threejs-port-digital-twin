@@ -2,8 +2,9 @@
 // the migrated source while keeping the package's official Three.js types.
 declare module "three/examples/jsm/loaders/GLTFLoader.js" {
   import type { AnimationClip, Group } from "three";
+  import type { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
   export interface GLTF { scene: Group; scenes: Group[]; animations: AnimationClip[]; userData: Record<string, unknown> }
-  export class GLTFLoader { load(url: string, onLoad: (gltf: GLTF) => void, onProgress?: (event: ProgressEvent<EventTarget>) => void, onError?: (error: unknown) => void): void }
+  export class GLTFLoader { setKTX2Loader(loader: KTX2Loader | null): this; load(url: string, onLoad: (gltf: GLTF) => void, onProgress?: (event: ProgressEvent<EventTarget>) => void, onError?: (error: unknown) => void): void }
 }
 declare module "three/examples/jsm/controls/OrbitControls.js" {
   import type { Camera, Vector3 } from "three";

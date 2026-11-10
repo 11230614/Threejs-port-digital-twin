@@ -140,6 +140,18 @@ export class ContainerRenderManager {
       if (lod === 0 || lod === 1 || lod === 2) lodCounts[lod] += 1;
     });
     const activeBatches = [...this.detailBatches.values(), ...this.simpleBatches.values()];
+    const geometryByLod: Record<string, { batches: number; instances: number; geometryVerticesPerBatchSum: number; geometryTrianglesPerBatchSum: number; estimatedSubmittedTriangles: number }> = {};
+    this.chunkStates.forEach((state) => state.batches.forEach(({ batch, lod }) => {
+      const bucket = geometryByLod[String(lod)] ??= { batches: 0, instances: 0, geometryVerticesPerBatchSum: 0, geometryTrianglesPerBatchSum: 0, estimatedSubmittedTriangles: 0 };
+      const position = batch.geometry.getAttribute("position");
+      const vertices = position?.count ?? 0;
+      const triangles = batch.geometry.index ? batch.geometry.index.count / 3 : vertices / 3;
+      bucket.batches += 1;
+      bucket.instances += batch.count;
+      bucket.geometryVerticesPerBatchSum += vertices;
+      bucket.geometryTrianglesPerBatchSum += triangles;
+      bucket.estimatedSubmittedTriangles += triangles * batch.count;
+    }));
     return {
       totalContainers: records.length,
       staticContainers: records.filter((record) => record.owner === "YARD").length,
@@ -152,6 +164,9 @@ export class ContainerRenderManager {
       chunkCreates: this.chunkCreates,
       chunkDisposals: this.chunkDisposals,
       lodCounts,
+      // Actual CPU-side geometry complexity of the currently allocated batches.
+      // This is descriptive telemetry and does not affect rendering or allocation.
+      geometryByLod,
     };
   }
 

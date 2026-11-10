@@ -84,6 +84,7 @@ export class FrameObserver {
   elapsedTime = 0;
   sequence = 0;
   paused = false;
+  onTaskMeasure: ((name: string, durationMs: number) => void) | null = null;
 
   constructor({ onError = defaultErrorHandler }: FrameObserverOptions = {}) {
     this.onError = onError;
@@ -144,6 +145,7 @@ export class FrameObserver {
         task.update(taskDeltaTime, this.elapsedTime);
         const spent = (globalThis.performance?.now?.() ?? Date.now()) - startedAt;
         task.stats.calls += 1; task.stats.totalMs += spent; task.stats.lastMs = spent;
+        this.onTaskMeasure?.(task.name, spent);
       } catch (error) { this.onError({ type: "task", name: task.name, error }); }
     });
   }

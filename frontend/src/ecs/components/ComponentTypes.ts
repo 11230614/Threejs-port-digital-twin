@@ -28,6 +28,7 @@ export const ComponentTypes = Object.freeze({
   SELECTABLE: "selectable",
   MOTION: "motion",
   AGV: "agv",
+  AGV_RADAR: "agvRadar",
   CRANE: "crane",
   QUAY_CRANE: "quayCrane",
   TROLLEY: "trolley",

@@ -30,6 +30,7 @@ import type { AssetState } from "../stores/types";
 import type { EntityManager } from "./EntityManager";
 import { ComponentTypes, type ComponentType } from "./components/ComponentTypes";
 import type { AGVComponent } from "./components/AGVComponent";
+import type { AgvRadarComponent } from "./components/AgvRadarComponent";
 import type { AssetComponent } from "./components/AssetComponent";
 import type { ContainerComponent, ContainerRecord } from "./components/ContainerComponent";
 import type { CraneComponent } from "./components/CraneComponent";
@@ -44,7 +45,7 @@ import type { TransformComponent } from "./components/TransformComponent";
 import type { TypeComponent } from "./components/TypeComponent";
 
 export type EntityId = string;
-export type ComponentValue = AGVComponent | AssetComponent | ContainerComponent | CraneComponent | HoistComponent | MotionComponent | QuayCraneComponent | RenderComponent | SelectableComponent | TaskComponent | TrolleyComponent | TransformComponent | TypeComponent | { value: unknown };
+export type ComponentValue = AgvRadarComponent | AGVComponent | AssetComponent | ContainerComponent | CraneComponent | HoistComponent | MotionComponent | QuayCraneComponent | RenderComponent | SelectableComponent | TaskComponent | TrolleyComponent | TransformComponent | TypeComponent | { value: unknown };
 
 export class Entity {
   readonly id: EntityId;

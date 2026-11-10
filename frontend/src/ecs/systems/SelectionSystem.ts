@@ -30,7 +30,7 @@ export class SelectionSystem {
     this.manager = entityManager;
   }
 
-  select(entity: SceneEntity): void {
+  select(entity: SceneEntity | null): void {
     this.store.selectEntity(entity);
     this.assetStore.selectEntity(entity);
   }

@@ -33,6 +33,11 @@ import type { TransformComponent } from "./components/TransformComponent";
 import type { TypeComponent } from "./components/TypeComponent";
 
 export class EntityManager {
+  private readonly beforeRemove = new Set<(entity: Entity) => void>();
+  onBeforeRemove(listener: (entity: Entity) => void): () => void {
+    this.beforeRemove.add(listener);
+    return () => { this.beforeRemove.delete(listener); };
+  }
   readonly entities = new Map<EntityId, Entity>();
   readonly componentStores = new Map<ComponentType | string, Map<EntityId, ComponentValue>>();
   private readonly store = useDeviceStore();
@@ -56,6 +61,7 @@ export class EntityManager {
   getEntitiesWith(...types: Array<ComponentType | string>): Entity[] { return this.getAll().filter((entity) => types.every((type) => this.hasComponent(entity.id, type))); }
   remove(id: EntityId, scene: THREE.Scene): void {
     const entity = this.entities.get(id); if (!entity) return;
+    this.beforeRemove.forEach((listener) => listener(entity));
     if (entity.wrapper) scene.remove(entity.wrapper); entity.dispose(); this.entities.delete(id);
     this.componentStores.forEach((store) => store.delete(id)); this.store.unregisterEntity(id);
   }

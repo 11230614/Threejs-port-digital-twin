@@ -1,8 +1,9 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { deviceRepository } from "../repositories/deviceRepository.js";
+import { SimulatedAlarm, type SimulatedAlarmState } from "./SimulatedAlarm.js";
 
-export interface TelemetryMessage { type: "agv.telemetry"; version: 1; sequence: number; timestamp: number; data: { agvId: string; entityId: string; position: { x: number; y: number; z: number }; speed: number } }
+export interface TelemetryMessage { type: "agv.telemetry"; version: 1; sequence: number; timestamp: number; data: { agvId: string; entityId: string; position: { x: number; y: number; z: number }; speed: number } & Partial<SimulatedAlarmState> }
 
 // Coordinates mirror the front-end AGV_LOOP_01 activity area (world units/metres).
 // The simulator deliberately uses a closed perimeter instead of an unbounded X axis.
@@ -29,6 +30,8 @@ function trackPosition(distance: number): { x: number; y: number; z: number } {
 }
 
 export class TelemetryService {
+  private readonly simulatedAlarms = new SimulatedAlarm();
+  private readonly simulateAlarms = process.env.TELEMETRY_SIMULATOR_ALARMS !== "false";
   private readonly wss: WebSocketServer; private readonly clients = new Set<WebSocket>(); private readonly snapshots = new Map<string, TelemetryMessage>(); private timer: ReturnType<typeof setInterval> | null = null; private tick = 0;
   constructor(server: HttpServer, private readonly enabled = process.env.TELEMETRY_SIMULATOR === "true", private readonly interval = Number(process.env.TELEMETRY_INTERVAL_MS || 500)) {
     this.wss = new WebSocketServer({ server, path: "/ws/telemetry" });
@@ -38,5 +41,5 @@ export class TelemetryService {
   start(): void { if (this.timer) return; this.timer = setInterval(() => void this.publish(), this.interval); }
   stop(): void { if (this.timer) clearInterval(this.timer); this.timer = null; for (const client of this.clients) client.close(); this.clients.clear(); this.wss.close(); }
   snapshot(): TelemetryMessage[] { return [...this.snapshots.values()]; }
-  private async publish(): Promise<void> { const devices = await deviceRepository.list({ type: "agv" }); const now = Date.now(); for (const [index, device] of devices.entries()) { const previous = this.snapshots.get(device.id); const distance = this.tick * SPEED * this.interval / 1000 + (index / Math.max(devices.length, 1)) * TRACK_LENGTH; const position = trackPosition(distance); const message: TelemetryMessage = { type: "agv.telemetry", version: 1, sequence: (previous?.sequence ?? 0) + 1, timestamp: now, data: { agvId: device.id, entityId: device.entityId, position, speed: SPEED } }; this.snapshots.set(device.id, message); this.clients.forEach((client) => { if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify(message)); }); } this.tick += 1; }
+  private async publish(): Promise<void> { const devices = await deviceRepository.list({ type: "agv" }); const now = Date.now(); for (const [index, device] of devices.entries()) { const previous = this.snapshots.get(device.id); const distance = this.tick * SPEED * this.interval / 1000 + (index / Math.max(devices.length, 1)) * TRACK_LENGTH; const position = trackPosition(distance); const message: TelemetryMessage = { type: "agv.telemetry", version: 1, sequence: (previous?.sequence ?? 0) + 1, timestamp: now, data: { agvId: device.id, entityId: device.entityId, position, speed: SPEED, ...(this.simulateAlarms ? this.simulatedAlarms.sample(device.id, this.tick * this.interval) : {}) } }; this.snapshots.set(device.id, message); this.clients.forEach((client) => { if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify(message)); }); } this.tick += 1; }
 }

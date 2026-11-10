@@ -49,16 +49,6 @@
 // 导入 Three.js：用到 Box3、Vector3、MathUtils.clamp
 import * as THREE from "three";
 
-// WORLD_Y_LIMIT（世界高度上限）：一百万米。
-// 【为什么要这么大】区块只按 XZ（水平）划分，Y（高度）方向不切。
-// 一个区块的包围盒在竖直方向必须"从天到地无限高"，
-// 才能包住地面、也包住四十米高的岸桥顶端。
-// 用 1_000_000 而不是 Infinity（无穷大）是关键：
-// Box3 里出现 Infinity 会让 distanceTo、getSize 之类的运算
-// 得出 NaN（非数值），而 NaN 参与比较永远为 false，
-// 区块会永远激活不了。一个足够大的有限数没有这个问题。
-// 下划线分隔符（1_000_000）只是让位数好读，JS 会忽略它
-const WORLD_Y_LIMIT = 1_000_000;
 // EDGE_EPSILON（边界极小量）：一千万分之一。
 // 专门解决"物体正好压在格子边界上"的归属问题，详见 _getChunkKeys
 const EDGE_EPSILON = 1e-6;
@@ -67,6 +57,8 @@ export interface SpatialHandle {
   id: string;
   bounds: THREE.Box3;
   getBounds: (() => THREE.Box3) | null;
+  cullingBounds: THREE.Box3;
+  getCullingBounds: (() => THREE.Box3) | null;
   dynamic: boolean;
   renderType: string | null;
   data: unknown;
@@ -78,6 +70,8 @@ export interface ChunkRecord {
   x: number;
   z: number;
   bounds: THREE.Box3;
+  /** World-space union of member render bounds, used only for frustum culling. */
+  cullingBounds: THREE.Box3;
   members: Map<string, SpatialHandle>;
   active: boolean;
   visible: boolean;
@@ -118,6 +112,8 @@ export interface ChunkRegisterOptions {
   id: string;
   bounds?: THREE.Box3 | null;
   getBounds?: (() => THREE.Box3) | null;
+  cullingBounds?: THREE.Box3 | null;
+  getCullingBounds?: (() => THREE.Box3) | null;
   dynamic?: boolean;
   renderType?: string | null;
   data?: unknown;
@@ -223,6 +219,8 @@ export class ChunkSystem {
     bounds = null,
     // getBounds（取包围盒的函数）：动态物体用这个，每帧现问现答
     getBounds = null,
+    cullingBounds = null,
+    getCullingBounds = null,
     // dynamic（是否会移动）
     dynamic = false,
     // renderType（渲染类别）：本系统不解读它，只是原样存着，
@@ -251,10 +249,13 @@ export class ChunkSystem {
     // 立刻求一次包围盒。放在建句柄之前，是为了让校验失败时
     // 不留下任何半成品状态
     const initialBounds = this._resolveBounds({ id, bounds, getBounds });
+    const initialCullingBounds = this._resolveBounds({ id, bounds: cullingBounds ?? initialBounds, getBounds: getCullingBounds });
     const handle = {
       id,
       bounds: initialBounds,
       getBounds,
+      cullingBounds: initialCullingBounds,
+      getCullingBounds,
       // Boolean(...) 强制转成真正的布尔值。
       // 调用方可能传 1、"yes" 这类真值，存成布尔后
       // getMetrics 里的 filter 与调试输出才不会出现 "dynamic: 1"
@@ -464,8 +465,10 @@ export class ChunkSystem {
       // 这个提前返回是本方法的性能命脉——上万个静态箱子每帧只花一次判断
       if (!handle.dynamic || !handle.getBounds) return;
       const nextBounds = this._resolveBounds(handle);
+      const nextCullingBounds = this._resolveBounds({ ...handle, bounds: handle.cullingBounds, getBounds: handle.getCullingBounds });
       // 位置完全没变就什么也不做（车停着的时候常见）
-      if (nextBounds.equals(handle.bounds)) return;
+      const cullingChanged = !nextCullingBounds.equals(handle.cullingBounds);
+      if (nextBounds.equals(handle.bounds) && !cullingChanged) return;
 
       const nextKeys = this._getChunkKeys(nextBounds);
       // membershipChanged（归属是否变了）：
@@ -480,8 +483,12 @@ export class ChunkSystem {
       // 每帧变成垃圾，几十个动态物体持续跑下来会引发频繁的垃圾回收，
       // 表现为规律性的帧率抖动
       handle.bounds.copy(nextBounds);
+      handle.cullingBounds.copy(nextCullingBounds);
       // 没换格子，到此为止
-      if (!membershipChanged) return;
+      if (!membershipChanged) {
+        if (cullingChanged) handle.chunkKeys.forEach((key) => this._recomputeChunkBounds(this.chunks.get(key)!));
+        return;
+      }
 
       this._setHandleChunks(handle, nextKeys);
       this.dynamicMoveCount += 1;
@@ -547,6 +554,7 @@ export class ChunkSystem {
     // 格子不存在就现建一个（懒建策略，见构造函数的说明）
     const chunk = this.chunks.get(key) ?? this._createChunk(key);
     chunk.members.set(handle.id, handle);
+    this._recomputeChunkBounds(chunk);
     // revision（版本号）自增。
     // 【它的用处】渲染层缓存了"这一格该画哪些东西"的批次数据。
     // 它每帧比对版本号，变了才重建批次，没变就直接复用。
@@ -559,6 +567,7 @@ export class ChunkSystem {
     const chunk = this.chunks.get(key);
     if (!chunk) return;
     chunk.members.delete(handle.id);
+    this._recomputeChunkBounds(chunk);
     chunk.revision += 1;
     handle.chunkKeys.delete(key);
     // 格子里还有别的成员，就留着它
@@ -587,12 +596,12 @@ export class ChunkSystem {
       key,
       x,
       z,
-      // 格子的包围盒：水平方向是这一格的范围，
-      // 竖直方向从 -WORLD_Y_LIMIT 到 +WORLD_Y_LIMIT（见常量处的说明）
+      // 裁剪盒保持固定 XZ 分区，只汇总成员真实渲染包围盒的 Y 范围。
       bounds: new THREE.Box3(
-        new THREE.Vector3(minX, -WORLD_Y_LIMIT, minZ),
-        new THREE.Vector3(minX + this.chunkSize, WORLD_Y_LIMIT, minZ + this.chunkSize),
+        new THREE.Vector3(minX, 0, minZ),
+        new THREE.Vector3(minX + this.chunkSize, 0, minZ + this.chunkSize),
       ),
+      cullingBounds: new THREE.Box3(),
       // members（本格里的成员）：句柄 id -> 句柄对象。
       // 用 Map 而非数组：按 id 删除是 O(1)，数组要先 indexOf 再 splice
       members: new Map(),
@@ -613,6 +622,33 @@ export class ChunkSystem {
     };
     this.chunks.set(key, chunk);
     return chunk;
+  }
+
+  private _recomputeChunkBounds(chunk: ChunkRecord): void {
+    chunk.cullingBounds.makeEmpty();
+    chunk.members.forEach((member) => {
+      // Only members routed through a spatial render adapter contribute to
+      // chunk visibility. Metadata/logic handles are not submitted as chunk
+      // batches; ordinary Object3D meshes retain Three.js object-level culling.
+      if (!member.renderType) return;
+      // A handle owned by a single center/owner chunk may render outside that
+      // chunk, so retain its complete render bounds there. Handles whose
+      // ownership bounds span cells contribute only their cell-local slice;
+      // otherwise a large block registered in every cell would give every
+      // chunk the same oversized bounds and defeat culling.
+      const ownershipKeys = this._getChunkKeys(member.bounds);
+      if (ownershipKeys.size <= 1) {
+        chunk.cullingBounds.union(member.cullingBounds);
+        return;
+      }
+      const cell = chunk.bounds;
+      const clipped = member.cullingBounds.clone();
+      clipped.min.x = Math.max(clipped.min.x, cell.min.x);
+      clipped.max.x = Math.min(clipped.max.x, cell.max.x);
+      clipped.min.z = Math.max(clipped.min.z, cell.min.z);
+      clipped.max.z = Math.min(clipped.max.z, cell.max.z);
+      if (!clipped.isEmpty()) chunk.cullingBounds.union(clipped);
+    });
   }
 
   // _setChunkActive（内部方法：切换一个格子的激活状态并派发事件）

@@ -94,7 +94,7 @@ export class AlarmSystem {
   }
 
   _checkAgvBattery(asset: AssetState, telemetry: AlarmTelemetry): void {
-    if (asset.type !== AssetType.AGV || !telemetry?.battery) return;
+    if (asset.type !== AssetType.AGV || typeof telemetry?.battery !== "number" || !Number.isFinite(telemetry.battery)) return;
     if (telemetry.battery > 25) { this.alarmStore.clearAutoAlarm(AlarmType.AGV_LOW_BATTERY, asset.id); return; }
     this._raise({ type: AlarmType.AGV_LOW_BATTERY, severity: telemetry.battery <= 15 ? AlarmSeverity.SEVERE : AlarmSeverity.WARNING, asset, telemetry, message: `${asset.number} 电量 ${telemetry.battery.toFixed(0)}%，低于调度安全阈值`, suggestion: "派发就近充电任务或切换备用车辆" });
   }

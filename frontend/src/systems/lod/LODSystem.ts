@@ -91,6 +91,8 @@ export interface LODUpdateInput {
   cameraPosition: THREE.Vector3;
   activeChunks: LODChunkLike[];
   timestamp?: number;
+  /** DEV experiment only: force visible chunks to a fixed LOD. */
+  forcedLevel?: number | null;
 }
 
 export interface LODMetrics {
@@ -154,7 +156,7 @@ export class LODSystem {
   }
 
   // update（每帧调用：按相机位置刷新所有活动格子的档位）
-  update({ cameraPosition, activeChunks, timestamp = 0 }: LODUpdateInput): LODDirtyChunk[] {
+  update({ cameraPosition, activeChunks, timestamp = 0, forcedLevel = null }: LODUpdateInput): LODDirtyChunk[] {
     // 同 ChunkSystem 的做法：看 isVector3 标记而不用 instanceof，
     // 避免项目里存在两份 Three.js 时的误判
     if (!cameraPosition?.isVector3) {
@@ -191,7 +193,7 @@ export class LODSystem {
       const distance = Number.isFinite(distanceValue)
         ? distanceValue as number
         : chunk.bounds.distanceToPoint(cameraPosition);
-      this._updateChunkState(chunk, distance, timestamp);
+      this._updateChunkState(chunk, distance, timestamp, forcedLevel);
     });
 
     // ---- 第二轮：处理"曾经活动、现在不在列表里"的格子 ----
@@ -275,7 +277,7 @@ export class LODSystem {
   }
 
   // _updateChunkState（内部方法：更新一个格子的档位状态）
-  private _updateChunkState(chunk: LODChunkLike, distance: number, timestamp: number): void {
+  private _updateChunkState(chunk: LODChunkLike, distance: number, timestamp: number, forcedLevel: number | null = null): void {
     let state = this.states.get(chunk.key);
     // ---- 分支一：第一次见到这个格子 ----
     if (!state) {
@@ -289,7 +291,7 @@ export class LODSystem {
         ? this.hiddenLevel
         // 传 null 当 currentLevel，告诉 _selectLevel"没有历史档位"，
         // 让它跳过滞回逻辑直接按 enter 阈值定档
-        : this._selectLevel(distance, null);
+        : forcedLevel ?? this._selectLevel(distance, null);
       state = {
         chunkId: chunk.key,
         // 存一份格子对象的引用。派发通知时要把它交给渲染层，
@@ -332,7 +334,7 @@ export class LODSystem {
     // 算出本帧应该是哪一档。传入当前档位，让 _selectLevel 施加滞回
     const targetLevel = chunk.visible === false
       ? this.hiddenLevel
-      : this._selectLevel(distance, state.level);
+      : forcedLevel ?? this._selectLevel(distance, state.level);
     // 特殊情况：档位没变，但格子里的成员换了。
     // 【为什么要单独处理】渲染层为这一格建的批次里包含哪些物体
     // 是按成员列表来的。成员变了就必须重建批次，哪怕精度档位没变。

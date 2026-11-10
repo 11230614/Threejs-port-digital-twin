@@ -18,6 +18,7 @@
 // ============================================================================
 
 import * as THREE from "three";
+import { AgvRadarComponent } from "../ecs/components/AgvRadarComponent";
 import { AGVComponent } from "../ecs/components/AGVComponent";
 import { ComponentTypes } from "../ecs/components/ComponentTypes";
 import { MotionComponent } from "../ecs/components/MotionComponent";
@@ -35,12 +36,14 @@ export class AGVFactory {
     model.updateMatrixWorld(true); const modelBox = new THREE.Box3().setFromObject(model);
     const cargoSlot = new THREE.Group(); cargoSlot.name = `${id}-cargo-slot`; cargoSlot.position.set(0, modelBox.max.y + 0.1, 0); wrapper.add(cargoSlot);
     const transform = new TransformComponent(wrapper);
+    modelBox.getCenter(transform.groundAnchor); transform.groundAnchor.y = modelBox.min.y;
     entity.addComponent(ComponentTypes.TYPE, new TypeComponent("AGV"))
       .addComponent(ComponentTypes.TRANSFORM, transform)
       .addComponent(ComponentTypes.RENDER, new RenderComponent(model, { onDispose }))
       .addComponent(ComponentTypes.SELECTABLE, new SelectableComponent())
       .addComponent(ComponentTypes.MOTION, new MotionComponent({ roadId, laneId, distance, speed }))
       .addComponent(ComponentTypes.AGV, new AGVComponent({ cargoSlot }));
+    entity.addComponent(ComponentTypes.AGV_RADAR, new AgvRadarComponent());
     transform.updateBBox(); return entityManager.add(entity);
   }
 }

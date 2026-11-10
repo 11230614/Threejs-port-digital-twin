@@ -29,6 +29,7 @@ export class AssetManager {
   private readonly manifest = new Map<string, AssetManifestEntry>();
   private readonly idleDisposeMs: number;
   private readonly now: () => number;
+  private acceptingLoads = true;
   private networkLoads = 0; private cacheHits = 0; private pendingHits = 0; private disposedAssets = 0;
 
   constructor({ loader = new AssetLoader(), normalizer = new AssetNormalizer(), idleDisposeMs = 0, now = () => globalThis.performance?.now() ?? Date.now() }: AssetManagerOptions = {}) {
@@ -46,6 +47,7 @@ export class AssetManager {
   async load(id: string, url: string, options: AssetManifestOptions = {}): Promise<AssetRecord> {
     const cached = this.cache.get(id); if (cached) { this.cacheHits += 1; return cached; }
     const pending = this.pending.get(id); if (pending) { this.pendingHits += 1; return pending; }
+    if (!this.acceptingLoads) throw new Error("AssetManager is no longer accepting model loads.");
     this.networkLoads += 1;
     const record: AssetRecord = { id, url, status: "loading", refCount: 0, fileSize: 0, root: null, metadata: null, statistics: null, unusedSince: null };
     const request = this.loader.load(url, { onProgress: (event) => { if (event.lengthComputable && event.total > 0) record.fileSize = event.total; } })
@@ -53,6 +55,11 @@ export class AssetManager {
       .then((asset) => { record.status = "ready"; record.root = asset.root; record.metadata = asset.metadata; record.statistics = inspectAsset(asset.root); this.cache.set(id, record); return record; })
       .catch((error) => { record.status = "error"; throw error; }).finally(() => this.pending.delete(id));
     this.pending.set(id, request); return request;
+  }
+  /** Stop new requests and wait for every active request, including normalization/cache writes, to settle. */
+  async closeAndDrain(): Promise<void> {
+    this.acceptingLoads = false;
+    while (this.pending.size > 0) await Promise.allSettled([...this.pending.values()]);
   }
   get(id: string): AssetRecord | null { return this.cache.get(id) ?? null; }
   clone(id: string): THREE.Group { return this.acquire(id); }

@@ -14,6 +14,7 @@ export class HighlightSystem {
   private readonly scene: THREE.Scene;
   private readonly selectionSystem: HighlightSelectionSystem;
   private readonly helper: THREE.Box3Helper;
+  private disposed = false;
 
   constructor(scene: THREE.Scene, selectionSystem: HighlightSelectionSystem) {
     this.scene = scene;
@@ -24,6 +25,7 @@ export class HighlightSystem {
   }
 
   update(): void {
+    if (this.disposed) return;
     const entity = this.selectionSystem.getSelected();
     if (!entity) {
       this.helper.visible = false;
@@ -38,5 +40,16 @@ export class HighlightSystem {
     transform.updateBBox();
     this.helper.box.copy(transform.bbox);
     this.helper.visible = true;
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.scene.remove(this.helper);
+    this.helper.geometry.dispose();
+    const materials = Array.isArray(this.helper.material)
+      ? this.helper.material
+      : [this.helper.material];
+    materials.forEach((material) => material.dispose());
   }
 }
